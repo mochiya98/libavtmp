@@ -52,7 +52,15 @@ jobs:
           CCACHE_MAXSIZE: 750M
           CCACHE_COMPRESS: '1'
         run: |
-          mapfile -t targets < <(node tools/ci-variant-shard.js "${{ matrix.shard }}" 8)
+          set -euo pipefail
+          targets_file=$(mktemp)
+          trap 'rm -f "$targets_file"' EXIT
+          node tools/ci-variant-shard.js "${{ matrix.shard }}" 8 > "$targets_file"
+          mapfile -t targets < "$targets_file"
+          if (( ${#targets[@]} == 0 )); then
+            echo "No build targets assigned to shard ${{ matrix.shard }}" >&2
+            exit 1
+          fi
           printf 'Building %d targets on shard %s\n' "${#targets[@]}" "${{ matrix.shard }}"
           printf '  %s\n' "${targets[@]}"
           ccache --zero-stats
