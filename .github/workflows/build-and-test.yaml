@@ -55,7 +55,8 @@ jobs:
           set -euo pipefail
           targets_file=$(mktemp)
           trap 'rm -f "$targets_file"' EXIT
-          node tools/ci-variant-shard.js "${{ matrix.shard }}" 8 > "$targets_file"
+          # webcodecs is built separately from the full "all" configuration.
+          node tools/ci-variant-shard.js "${{ matrix.shard }}" 8 webcodecs > "$targets_file"
           mapfile -t targets < "$targets_file"
           if (( ${#targets[@]} == 0 )); then
             echo "No build targets assigned to shard ${{ matrix.shard }}" >&2
@@ -74,16 +75,79 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  build-webcodecs-full:
+    name: Build full WebCodecs variant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.5
+          actions-cache-folder: 'cache-emsdk'
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y meson ccache
+
+      - uses: actions/cache@v4
+        name: Cache source archives
+        with:
+          path: build/*.tar*
+          key: sources-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ hashFiles('mk/*') }}
+
+      - uses: actions/cache@v4
+        name: Cache compiler outputs
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-emcc-6.0.5-webcodecs-full-
+
+      - name: Configure WebCodecs with all supported components
+        shell: bash
+        run: |
+          set -euo pipefail
+          full_config=$(<configs/configs/all/config.json)
+          (
+            cd configs
+            node mkconfig.js webcodecs "$full_config"
+          )
+          cmp configs/configs/all/config.json configs/configs/webcodecs/config.json
+
+      - name: Build full WebCodecs variant
+        env:
+          EM_COMPILER_WRAPPER: ccache
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1500M
+          CCACHE_COMPRESS: '1'
+        run: |
+          set -euo pipefail
+          ccache --zero-stats
+          make -j9 build-webcodecs
+          ccache --show-stats
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-webcodecs-full
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
   package:
     name: Package all variants
-    needs: build
+    needs: [build, build-webcodecs-full]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: dist-shard-*
+          pattern: dist-*
           path: dist/
           merge-multiple: true
 

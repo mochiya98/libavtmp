@@ -7,15 +7,17 @@ const path = require("path");
 const shard = Number(process.argv[2]);
 const shardCount = Number(process.argv[3]);
 if (!Number.isInteger(shard) || !Number.isInteger(shardCount) || shardCount < 1 || shard < 0 || shard >= shardCount) {
-    console.error("usage: ci-variant-shard.js SHARD SHARD_COUNT");
+    console.error("usage: ci-variant-shard.js SHARD SHARD_COUNT [EXCLUDED_VARIANT ...]");
     process.exit(2);
 }
+const excluded = new Set(process.argv.slice(4));
 
 const root = path.resolve(__dirname, "..");
 const configRoot = path.join(root, "configs", "configs");
 const variants = fs.readdirSync(configRoot, {withFileTypes: true})
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+    .filter((name) => !excluded.has(name))
     .sort();
 
 function countMatches(file, re) {
