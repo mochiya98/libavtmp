@@ -1,0 +1,24 @@
+--enable-protocol=data --enable-protocol=file
+--enable-demuxer=mov
+--enable-muxer=avif
+--enable-muxer=f4v
+--enable-muxer=ipod
+--enable-muxer=ismv
+--enable-muxer=mov
+--enable-muxer=mp4
+--enable-muxer=tg2
+--enable-muxer=tgp
+--enable-demuxer=aac
+--enable-muxer=adts
+--enable-demuxer=matroska
+--enable-muxer=matroska --enable-muxer=webm
+--enable-parser=aac
+--enable-decoder=aac
+--enable-encoder=aac
+--enable-parser=h264
+--enable-decoder=h264
+--enable-bsf=h264_metadata
+--enable-bsf=extract_extradata
+--enable-libopenh264
+--enable-decoder=libopenh264
+--enable-encoder=libopenh264

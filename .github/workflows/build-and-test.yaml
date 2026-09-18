@@ -1,0 +1,44 @@
+name: build-and-test
+run-name: Build and test ${{ github.sha }}
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.5
+          actions-cache-folder: 'cache-emsdk'
+
+      - run: sudo apt install -y meson
+
+      - uses: actions/cache@v4
+        name: Cache dependencies
+        with:
+          key: cache-dependencies-${{ hashFiles('mk/*') }}
+          path: build/*.tar*
+
+      - run: make extract
+
+      # Build every variant defined under configs/configs, including variants
+      # that are intentionally absent from RELEASE_VARIANTS/MODULAR_VARIANTS.
+      # Each build writes its JS/WASM outputs into the same dist/ directory.
+      - run: make -j9 build-every-variant
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-all-variants-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
+      - run: npm test

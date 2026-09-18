@@ -1,0 +1,14 @@
+*.tar.xz
+*.tar.gz
+.*.swp
+.vscode/
+
+dist/
+build/
+
+tests/out.ogg
+tests/out.opus
+tests/out.webm
+tests/out.mp4
+
+node_modules/

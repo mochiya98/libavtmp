@@ -1,0 +1,2 @@
+--enable-libopenh264
+--enable-decoder=libopenh264
