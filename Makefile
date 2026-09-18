@@ -54,15 +54,14 @@ all: build-default
 # derived from the filesystem so CI also includes variants that are not part
 # of RELEASE_VARIANTS/MODULAR_VARIANTS (for example decoder-wmv3).
 ALL_VARIANTS := $(sort $(notdir $(patsubst %/,%,$(wildcard configs/configs/*/))))
+ALL_VARIANT_TARGETS := $(addprefix build-,$(ALL_VARIANTS))
 
+# Keep all variants in one Make dependency graph.  The old shell loop invoked
+# one recursive Make per variant, which imposed a hard barrier between variants
+# and prevented the top-level jobserver from scheduling work across them.
 .PHONY: build-every-variant
-build-every-variant:
-	@echo "Building $(words $(ALL_VARIANTS)) variants into dist/"
-	@set -e; \
-	for v in $(ALL_VARIANTS); do \
-		echo "==> $$v"; \
-		$(MAKE) build-$$v; \
-	done
+build-every-variant: $(ALL_VARIANT_TARGETS)
+	@echo "Built $(words $(ALL_VARIANTS)) variants into dist/"
 
 include mk/*.mk
 
