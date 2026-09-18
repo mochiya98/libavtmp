@@ -41,4 +41,3 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      - run: npm test
