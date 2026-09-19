@@ -23,6 +23,8 @@
 #include <pthread.h>
 #endif
 
+#include <limits.h>
+#include "libavutil/mem.h"
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
 #include "libavfilter/avfilter.h"

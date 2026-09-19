@@ -146,7 +146,9 @@ var ff_copyin_side_data = Module.ff_copyin_side_data = function(pktPtr, side_dat
 var ff_copyout_codecpar = Module.ff_copyout_codecpar = function(codecpar) {
     return {
         bit_rate: AVCodecParameters_bit_rate(codecpar),
-        channel_layoutmask: AVCodecParameters_channel_layoutmask(codecpar),
+        bit_ratehi: AVCodecParameters_bit_ratehi(codecpar),
+        channel_layoutmask: AVCodecParameters_channel_layout(codecpar),
+        channel_layoutmaskhi: AVCodecParameters_channel_layouthi(codecpar),
         channels: AVCodecParameters_channels(codecpar),
         chroma_location: AVCodecParameters_chroma_location(codecpar),
         codec_id: AVCodecParameters_codec_id(codecpar),
@@ -157,6 +159,18 @@ var ff_copyout_codecpar = Module.ff_copyout_codecpar = function(codecpar) {
         color_space: AVCodecParameters_color_space(codecpar),
         color_trc: AVCodecParameters_color_trc(codecpar),
         format: AVCodecParameters_format(codecpar),
+        bits_per_coded_sample: AVCodecParameters_bits_per_coded_sample(codecpar),
+        bits_per_raw_sample: AVCodecParameters_bits_per_raw_sample(codecpar),
+        block_align: AVCodecParameters_block_align(codecpar),
+        frame_size: AVCodecParameters_frame_size(codecpar),
+        initial_padding: AVCodecParameters_initial_padding(codecpar),
+        trailing_padding: AVCodecParameters_trailing_padding(codecpar),
+        seek_preroll: AVCodecParameters_seek_preroll(codecpar),
+        sample_aspect_ratio_num: AVCodecParameters_sample_aspect_ratio_num(codecpar),
+        sample_aspect_ratio_den: AVCodecParameters_sample_aspect_ratio_den(codecpar),
+        framerate_num: AVCodecParameters_framerate_num(codecpar),
+        framerate_den: AVCodecParameters_framerate_den(codecpar),
+
         height: AVCodecParameters_height(codecpar),
         level: AVCodecParameters_level(codecpar),
         profile: AVCodecParameters_profile(codecpar),
@@ -186,7 +200,11 @@ var ff_copyout_codecpar_extradata = Module.ff_copyout_codecpar_extradata = funct
 /// @types ff_copyin_codecpar@sync(codecparPtr: number, codecpar: CodecParameters): @promise@void@
 var ff_copyin_codecpar = Module.ff_copyin_codecpar = function(codecparPtr, codecpar) {
     [
-        "bit_rate", "channel_layoutmask", "channels", "chroma_location",
+        "bit_rate", "bit_ratehi", "channels", "chroma_location",
+        "bits_per_coded_sample", "bits_per_raw_sample", "block_align",
+        "frame_size", "initial_padding", "trailing_padding", "seek_preroll",
+        "sample_aspect_ratio_num", "sample_aspect_ratio_den",
+        "framerate_num", "framerate_den",
         "codec_id", "codec_tag", "codec_type", "color_primaries", "color_range",
         "color_space", "color_trc", "format", "height", "level", "profile",
         "sample_rate", "width"
@@ -195,27 +213,32 @@ var ff_copyin_codecpar = Module.ff_copyin_codecpar = function(codecparPtr, codec
             CAccessors["AVCodecParameters_" + key + "_s"](codecparPtr, codecpar[key]);
     });
 
+    // These accessors explicitly split the 64-bit mask. The legacy mask
+    // setter is an i64 ABI function and must not be called as a scalar setter.
+    if ("channel_layoutmask" in codecpar) {
+        AVCodecParameters_channel_layout_s(codecparPtr, codecpar.channel_layoutmask);
+        AVCodecParameters_channel_layouthi_s(codecparPtr, codecpar.channel_layoutmaskhi || 0);
+        if ("channels" in codecpar)
+            AVCodecParameters_channels_s(codecparPtr, codecpar.channels);
+    }
+
     ff_copyin_codecpar_extradata(codecparPtr, codecpar.extradata);
-    ff_copyin_codecpar_side_data(codecparPtr, codecpar.side_data);
+    ff_copyin_codecpar_side_data(codecparPtr, codecpar.coded_side_data || codecpar.side_data);
 };
 
 // Copy in codec parameter extradata. Used internally by ff_copyin_codecpar.
 var ff_copyin_codecpar_extradata = Module.ff_copyin_codecpar_extradata = function(codecparPtr, extradata) {
-    if (!extradata) {
-        AVCodecParameters_extradata_s(codecparPtr, 0);
-        AVCodecParameters_extradata_size_s(codecparPtr, 0);
-    } else {
-        var extradataPtr = malloc(extradata.length);
-        copyin_u8(extradataPtr, extradata);
-        AVCodecParameters_extradata_s(codecparPtr, extradataPtr);
-        AVCodecParameters_extradata_size_s(codecparPtr, extradata.length);
-    }
+    var size = extradata ? extradata.length : 0;
+    var ptr = ff_codecpar_alloc_extradata(codecparPtr, size);
+    if (size && !ptr)
+        throw new Error("Failed to allocate codec extradata");
+    if (size)
+        copyin_u8(ptr, extradata);
 };
 
 // Copy in a codecpar's side data. Used internally by ff_copyin_codecpar.
 var ff_copyin_codecpar_side_data = Module.ff_copyin_codecpar_side_data = function(codecpar, side_data) {
-    AVCodecParameters_coded_side_data_s(codecpar, 0);
-    AVCodecParameters_nb_coded_side_data_s(codecpar, 0);
+    ff_codecpar_clear_side_data(codecpar);
     if (!side_data) return;
     side_data.forEach(function(elem) {
         var data = ff_codecpar_new_side_data(codecpar, elem.type, elem.data.length);

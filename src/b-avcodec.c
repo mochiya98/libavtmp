@@ -124,7 +124,7 @@ B(enum AVMediaType, codec_type)
 B(uint8_t *, extradata)
 B(int, extradata_size)
 B(int, format)
-B(int64_t, bit_rate)
+AL(AVCodecParameters, int64_t, bit_rate)
 B(int, profile)
 B(int, level)
 B(int, width)
@@ -135,6 +135,13 @@ B(enum AVColorTransferCharacteristic, color_trc)
 B(enum AVColorSpace, color_space)
 B(enum AVChromaLocation, chroma_location)
 B(int, sample_rate)
+B(int, bits_per_coded_sample)
+B(int, bits_per_raw_sample)
+B(int, block_align)
+B(int, frame_size)
+B(int, initial_padding)
+B(int, trailing_padding)
+B(int, seek_preroll)
 
 #if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
 B(AVPacketSideData *, coded_side_data)
@@ -153,7 +160,33 @@ RAT(AVCodecParameters, framerate)
 RAT_FAKE(AVCodecParameters, framerate, 60, 1)
 #endif
 
+RAT(AVCodecParameters, sample_aspect_ratio)
+
 CHL(AVCodecParameters)
+
+/* Allocate in the FFmpeg allocator, including its required zero padding.
+ * Preserve the old allocation on failure; never expose a WASM ABI offset. */
+uint8_t *ff_codecpar_alloc_extradata(AVCodecParameters *codecpar, size_t size) {
+    uint8_t *data = NULL;
+    if (size) {
+        if (size > INT_MAX - AV_INPUT_BUFFER_PADDING_SIZE)
+            return NULL;
+        data = av_mallocz(size + AV_INPUT_BUFFER_PADDING_SIZE);
+        if (!data)
+            return NULL;
+    }
+    av_freep(&codecpar->extradata);
+    codecpar->extradata = data;
+    codecpar->extradata_size = size;
+    return data;
+}
+
+void ff_codecpar_clear_side_data(AVCodecParameters *codecpar) {
+#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(60, 30, 100)
+    av_packet_side_data_free(&codecpar->coded_side_data,
+                            &codecpar->nb_coded_side_data);
+#endif
+}
 
 uint8_t *ff_codecpar_new_side_data(
     AVCodecParameters *codecpar, enum AVPacketSideDataType type, size_t size

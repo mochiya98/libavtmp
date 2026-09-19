@@ -810,16 +810,21 @@ var ff_free_muxer = Module.ff_free_muxer = function(oc, pb) {
  * ): @promsync@[number, Stream[]]@
  */
 function ff_init_demuxer_file(filename, opts) {
-    var fmt_ctx;
+    var fmt_ctx = 0;
 
     if (typeof opts === "string")
         opts = {format: opts};
     else if (typeof opts === "undefined")
         opts = {};
 
+    // avformat_open_input_js takes AVInputFormat*, not a JavaScript string.
+    var inputFormat = opts.format ? av_find_input_format(opts.format) : 0;
+    if (opts.format && !inputFormat)
+        throw new Error("Input format is not present in this build: " + opts.format);
+
     return avformat_open_input_js(
         filename,
-        opts.format||null,
+        inputFormat,
         opts.open_input_options||null
     ).then(function(ret) {
         fmt_ctx = ret;
@@ -828,7 +833,9 @@ function ff_init_demuxer_file(filename, opts) {
 
         return avformat_find_stream_info(fmt_ctx, 0);
 
-    }).then(function() {
+    }).then(function(ret) {
+        if (ret < 0)
+            throw new Error("Could not find stream information: " + ff_error(ret));
         var nb_streams = AVFormatContext_nb_streams(fmt_ctx);
         var streams = [];
         for (var i = 0; i < nb_streams; i++) {
@@ -843,6 +850,7 @@ function ff_init_demuxer_file(filename, opts) {
             outStream.codecpar = codecpar;
             outStream.codec_type = AVCodecParameters_codec_type(codecpar);
             outStream.codec_id = AVCodecParameters_codec_id(codecpar);
+            outStream.disposition = AVStream_disposition(inStream);
 
             // Duration and related
             outStream.time_base_num = AVStream_time_base_num(inStream);
@@ -860,6 +868,10 @@ function ff_init_demuxer_file(filename, opts) {
 
         return [fmt_ctx, streams];
 
+    }).catch(function(ex) {
+        if (fmt_ctx)
+            avformat_close_input_js(fmt_ctx);
+        throw ex;
     });
 }
 Module.ff_init_demuxer_file = function() {

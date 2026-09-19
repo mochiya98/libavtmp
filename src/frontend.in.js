@@ -347,6 +347,7 @@
 
                     ret.worker.onerror = ev => {
                         console.error(ev);
+                        ret.worker.terminate();
                         rej(ev.error || new Error(ev.message));
                     };
 
@@ -360,9 +361,10 @@
                     // Our handlers
                     ret.on = 1;
                     ret.handlers = {
-                        error: [function(ex) {
+                        error: [null, function(ex) {
+                            ret.worker.terminate();
                             rej(ex);
-                        }, null],
+                        }],
                         onready: [function() {
                             res();
                         }, null],
@@ -516,11 +518,21 @@
                     };
 
                     // Termination is more complicated
+                    var terminated = false;
                     ret.terminate = function() {
-                        ret.PThread.unusedWorkers
-                        .concat(ret.PThread.runningWorkers)
-                        .forEach(function(worker) {
-                            worker.terminate()
+                        if (terminated) return;
+                        terminated = true;
+                        var pool = ret.PThread;
+                        if (!pool) return;
+                        var workers = (pool.unusedWorkers || [])
+                            .concat(pool.runningWorkers || []);
+                        Object.keys(pool.pthreads || {}).forEach(function(key) {
+                            workers.push(pool.pthreads[key]);
+                        });
+                        workers.filter(function(worker, index) {
+                            return worker && workers.indexOf(worker) === index;
+                        }).forEach(function(worker) {
+                            if (typeof worker.terminate === "function") worker.terminate();
                         });
                     };
 

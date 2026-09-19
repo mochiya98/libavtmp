@@ -169,6 +169,8 @@ declare namespace LibAV {
      * Stream information, as returned by ff_init_demuxer_file.
      */
     export interface Stream {
+        /** AV_DISPOSITION flags, including attached pictures. */
+        disposition?: number;
         /**
          * Pointer to the underlying AVStream.
          */
@@ -247,6 +249,19 @@ declare namespace LibAV {
          */
         codec_type: number;
 
+        /** Codec framing, precision, delay and display parameters. */
+        bits_per_coded_sample?: number;
+        bits_per_raw_sample?: number;
+        block_align?: number;
+        frame_size?: number;
+        initial_padding?: number;
+        trailing_padding?: number;
+        seek_preroll?: number;
+        sample_aspect_ratio_num?: number;
+        sample_aspect_ratio_den?: number;
+        framerate_num?: number;
+        framerate_den?: number;
+
         /**
          * Specific type of the encoded data (the codec used).
          */
@@ -309,6 +324,7 @@ declare namespace LibAV {
          * Audio only. The channel layout and number of channels.
          */
         channel_layoutmask?: number;
+        channel_layoutmaskhi?: number;
         channels?: number;
 
         /**
@@ -782,6 +798,10 @@ declare namespace LibAV {
      * The main wrapper for libav.js, typically named "LibAV".
      */
     export interface LibAVWrapper extends LibAVOpts, LibAVStatic {
+        /** Inspect feature support and the target selected for an instance. */
+        target(opts?: LibAVOpts): "asm" | "wasm" | "thr";
+        isWebAssemblySupported(): boolean;
+        isThreadingSupported(): boolean;
         /**
          * Create a LibAV instance.
          * @param opts  Options

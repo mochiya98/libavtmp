@@ -36,6 +36,7 @@ BA(AVStream *, streams)
 #define BL(type, field) AL(AVStream, type, field)
 B(AVCodecParameters *, codecpar)
 B(enum AVDiscard, discard)
+B(int, disposition)
 BL(int64_t, duration)
 B(AVDictionary *, metadata)
 #undef B

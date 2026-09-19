@@ -132,6 +132,10 @@
         "post": true,
 
         "functions": [
+            ["avcodec_parameters_free", null, ["number"]],
+            ["avcodec_parameters_copy", "number", ["number", "number"]],
+            ["avcodec_parameters_alloc", "number", []],
+            ["avcodec_get_name", "string", ["number"]],
             ["avcodec_descriptor_get", "number", ["number"]],
             ["avcodec_descriptor_get_by_name", "number", ["string"]],
             ["avcodec_descriptor_next", "number", ["number"]],
@@ -148,6 +152,8 @@
             ["AVPacketSideData_type", "number", ["number", "number"]],
             ["av_packet_unref", null, ["number"]],
             ["av_shrink_packet", null, ["number", "number"]],
+            ["ff_codecpar_alloc_extradata", "number", ["number", "number"]],
+            ["ff_codecpar_clear_side_data", null, ["number"]],
             ["ff_codecpar_new_side_data", "number", ["number", "number", "number"]],
             ["LIBAVCODEC_VERSION_INT", "number", []]
         ],
@@ -157,6 +163,8 @@
             "ff_copyout_packet",
             "ff_copyout_packet_ptr",
             "ff_copyin_packet",
+            "ff_copyout_codecpar",
+            "ff_copyin_codecpar",
             "ff_copyout_dict"
         ],
 
@@ -171,6 +179,12 @@
             ]],
             ["AVCodecParameters", [
                 "bit_rate",
+                "bit_ratehi",
+                "bits_per_coded_sample",
+                "bits_per_raw_sample",
+                "block_align",
+                "channel_layout",
+                "channel_layouthi",
                 "channel_layoutmask",
                 "channels",
                 "ch_layout_nb_channels",
@@ -186,6 +200,11 @@
                 "extradata",
                 "extradata_size",
                 "format",
+                "frame_size",
+                "initial_padding",
+                "trailing_padding",
+                "seek_preroll",
+                {"name": "sample_aspect_ratio", "rational": true},
                 {"name": "framerate", "rational": true},
                 "height",
                 "level",
@@ -257,6 +276,7 @@
         "functions": [
             ["av_find_best_stream", "number", ["number", "number", "number", "number", "number", "number"]],
             ["av_find_input_format", "number", ["string"]],
+            ["av_guess_format", "number", ["string", "string", "string"]],
             ["avformat_alloc_context", "number", []],
             ["avformat_alloc_output_context2_js", "number", ["number", "string", "string"]],
             ["avformat_close_input", null, ["number"]],
@@ -333,6 +353,7 @@
             ["AVStream", [
                 "codecpar",
                 "discard",
+                "disposition",
                 "duration",
                 "durationhi",
                 "metadata",
@@ -365,12 +386,8 @@
             ["avcodec_find_encoder_by_name", "number", ["string"]],
             ["avcodec_flush_buffers", null, ["number"]],
             ["avcodec_free_context", null, ["number"]],
-            ["avcodec_get_name", "string", ["number"]],
             ["avcodec_open2", "number", ["number", "number", "number"]],
             ["avcodec_open2_js", "number", ["number", "number", "number"]],
-            ["avcodec_parameters_alloc", "number", []],
-            ["avcodec_parameters_copy", "number", ["number", "number"]],
-            ["avcodec_parameters_free", null, ["number"]],
             ["avcodec_parameters_from_context" ,"number", ["number", "number"]],
             ["avcodec_parameters_to_context" ,"number", ["number", "number"]],
             ["avcodec_receive_frame", "number", ["number", "number"]],
@@ -385,9 +402,7 @@
             "ff_free_encoder",
             "ff_free_decoder",
             "ff_encode_multi",
-            "ff_decode_multi",
-            "ff_copyout_codecpar",
-            "ff_copyin_codecpar"
+            "ff_decode_multi"
         ],
 
         "accessors": [
