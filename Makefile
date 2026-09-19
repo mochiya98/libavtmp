@@ -55,6 +55,8 @@ all: build-default
 # of RELEASE_VARIANTS/MODULAR_VARIANTS (for example decoder-wmv3).
 ALL_VARIANTS := $(sort $(notdir $(patsubst %/,%,$(wildcard configs/configs/*/))))
 ALL_VARIANT_TARGETS := $(addprefix build-,$(ALL_VARIANTS))
+ALL_RELEASE_VARIANT_TARGETS := $(addprefix build-release-,$(ALL_VARIANTS))
+ALL_DBG_VARIANT_TARGETS := $(addprefix build-dbg-,$(ALL_VARIANTS))
 
 # Keep all variants in one Make dependency graph.  The old shell loop invoked
 # one recursive Make per variant, which imposed a hard barrier between variants
@@ -63,28 +65,44 @@ ALL_VARIANT_TARGETS := $(addprefix build-,$(ALL_VARIANTS))
 build-every-variant: $(ALL_VARIANT_TARGETS)
 	@echo "Built $(words $(ALL_VARIANTS)) variants into dist/"
 
+.PHONY: build-every-release-variant build-every-dbg-variant
+build-every-release-variant: $(ALL_RELEASE_VARIANT_TARGETS)
+	@echo "Built $(words $(ALL_VARIANTS)) release variants into dist/"
+
+build-every-dbg-variant: $(ALL_DBG_VARIANT_TARGETS)
+	@echo "Built $(words $(ALL_VARIANTS)) dbg variants into dist/"
+
 include mk/*.mk
 
 
 build-%: \
+	build-release-% \
+	build-dbg-%
+	true
+
+build-release-%: \
 	dist/libav-$(LIBAVJS_VERSION)-%.js \
 	dist/libav-%.js \
 	dist/libav-$(LIBAVJS_VERSION)-%.mjs \
 	dist/libav-%.mjs \
+	dist/libav-$(LIBAVJS_VERSION)-%.asm.js \
+	dist/libav-$(LIBAVJS_VERSION)-%.asm.mjs \
+	dist/libav-$(LIBAVJS_VERSION)-%.wasm.js \
+	dist/libav-$(LIBAVJS_VERSION)-%.wasm.mjs \
+	dist/libav-$(LIBAVJS_VERSION)-%.thr.js \
+	dist/libav-$(LIBAVJS_VERSION)-%.thr.mjs \
+	dist/libav.types.d.ts
+	true
+
+build-dbg-%: \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.js \
 	dist/libav-%.dbg.js \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.mjs \
 	dist/libav-%.dbg.mjs \
-	dist/libav-$(LIBAVJS_VERSION)-%.asm.js \
-	dist/libav-$(LIBAVJS_VERSION)-%.asm.mjs \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.asm.js \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.asm.mjs \
-	dist/libav-$(LIBAVJS_VERSION)-%.wasm.js \
-	dist/libav-$(LIBAVJS_VERSION)-%.wasm.mjs \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.wasm.js \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.wasm.mjs \
-	dist/libav-$(LIBAVJS_VERSION)-%.thr.js \
-	dist/libav-$(LIBAVJS_VERSION)-%.thr.mjs \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.thr.js \
 	dist/libav-$(LIBAVJS_VERSION)-%.dbg.thr.mjs \
 	dist/libav.types.d.ts

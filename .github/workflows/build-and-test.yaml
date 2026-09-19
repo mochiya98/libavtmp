@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build shard ${{ matrix.shard }}
+  build-release:
+    name: Build release shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: true
@@ -26,27 +26,28 @@ jobs:
       - uses: mymindstorm/setup-emsdk@v16
         with:
           version: 6.0.5
-          actions-cache-folder: 'cache-emsdk'
+          actions-cache-folder: 'cache-emsdk-release'
 
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y meson ccache
 
       - uses: actions/cache@v4
-        name: Cache source archives
+        name: Cache release source archives
         with:
           path: build/*.tar*
-          key: sources-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ hashFiles('mk/*') }}
+          key: sources-release-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ hashFiles('mk/*') }}
 
       - uses: actions/cache@v4
-        name: Cache compiler outputs
+        name: Cache release compiler outputs
         with:
           path: .ccache
-          key: ccache-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-release-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ccache-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-
+            ccache-release-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-
 
-      - name: Build assigned variants
+      - name: Build assigned release variants
         env:
+          BUILD_TYPE: release
           EM_COMPILER_WRAPPER: ccache
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_MAXSIZE: 750M
@@ -59,10 +60,10 @@ jobs:
           node tools/ci-variant-shard.js "${{ matrix.shard }}" 8 webcodecs > "$targets_file"
           mapfile -t targets < "$targets_file"
           if (( ${#targets[@]} == 0 )); then
-            echo "No build targets assigned to shard ${{ matrix.shard }}" >&2
+            echo "No release build targets assigned to shard ${{ matrix.shard }}" >&2
             exit 1
           fi
-          printf 'Building %d targets on shard %s\n' "${#targets[@]}" "${{ matrix.shard }}"
+          printf 'Building %d release targets on shard %s\n' "${#targets[@]}" "${{ matrix.shard }}"
           printf '  %s\n' "${targets[@]}"
           ccache --zero-stats
           make -j9 "${targets[@]}"
@@ -70,13 +71,13 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-shard-${{ matrix.shard }}
+          name: dist-release-shard-${{ matrix.shard }}
           path: dist/
           if-no-files-found: error
           retention-days: 1
 
-  build-webcodecs-full:
-    name: Build full WebCodecs variant
+  build-release-webcodecs-full:
+    name: Build full release WebCodecs variant
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,26 +90,26 @@ jobs:
       - uses: mymindstorm/setup-emsdk@v16
         with:
           version: 6.0.5
-          actions-cache-folder: 'cache-emsdk'
+          actions-cache-folder: 'cache-emsdk-release'
 
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y meson ccache
 
       - uses: actions/cache@v4
-        name: Cache source archives
+        name: Cache release source archives
         with:
           path: build/*.tar*
-          key: sources-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ hashFiles('mk/*') }}
+          key: sources-release-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ hashFiles('mk/*') }}
 
       - uses: actions/cache@v4
-        name: Cache compiler outputs
+        name: Cache release compiler outputs
         with:
           path: .ccache
-          key: ccache-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ccache-release-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ccache-${{ runner.os }}-emcc-6.0.5-webcodecs-full-
+            ccache-release-${{ runner.os }}-emcc-6.0.5-webcodecs-full-
 
-      - name: Configure WebCodecs with all supported components
+      - name: Configure release WebCodecs with all supported components
         shell: bash
         run: |
           set -euo pipefail
@@ -119,7 +120,7 @@ jobs:
           )
           cmp configs/configs/all/config.json configs/configs/webcodecs/config.json
 
-      - name: Build full WebCodecs variant
+      - name: Build full release WebCodecs variant
         env:
           EM_COMPILER_WRAPPER: ccache
           CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -128,30 +129,30 @@ jobs:
         run: |
           set -euo pipefail
           ccache --zero-stats
-          make -j9 build-webcodecs
+          make -j9 build-release-webcodecs
           ccache --show-stats
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-webcodecs-full
+          name: dist-release-webcodecs-full
           path: dist/
           if-no-files-found: error
           retention-days: 1
 
-  package:
-    name: Package all variants
-    needs: [build, build-webcodecs-full]
+  package-release:
+    name: Package all release variants
+    needs: [build-release, build-release-webcodecs-full]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: dist-*
+          pattern: dist-release-*
           path: dist/
           merge-multiple: true
 
-      - name: Verify all variants are present
+      - name: Verify all release variants are present
         shell: bash
         run: |
           set -euo pipefail
@@ -167,6 +168,172 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-all-variants-${{ github.sha }}
+          name: dist-all-release-variants-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+
+  build-dbg:
+    name: Build dbg shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 8
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.5
+          actions-cache-folder: 'cache-emsdk-dbg'
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y meson ccache
+
+      - uses: actions/cache@v4
+        name: Cache dbg source archives
+        with:
+          path: build/*.tar*
+          key: sources-dbg-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ hashFiles('mk/*') }}
+
+      - uses: actions/cache@v4
+        name: Cache dbg compiler outputs
+        with:
+          path: .ccache
+          key: ccache-dbg-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-dbg-${{ runner.os }}-emcc-6.0.5-shard-${{ matrix.shard }}-
+
+      - name: Build assigned dbg variants
+        env:
+          BUILD_TYPE: dbg
+          EM_COMPILER_WRAPPER: ccache
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 750M
+          CCACHE_COMPRESS: '1'
+        run: |
+          set -euo pipefail
+          targets_file=$(mktemp)
+          trap 'rm -f "$targets_file"' EXIT
+          # webcodecs is built separately from the full "all" configuration.
+          node tools/ci-variant-shard.js "${{ matrix.shard }}" 8 webcodecs > "$targets_file"
+          mapfile -t targets < "$targets_file"
+          if (( ${#targets[@]} == 0 )); then
+            echo "No dbg build targets assigned to shard ${{ matrix.shard }}" >&2
+            exit 1
+          fi
+          printf 'Building %d dbg targets on shard %s\n' "${#targets[@]}" "${{ matrix.shard }}"
+          printf '  %s\n' "${targets[@]}"
+          ccache --zero-stats
+          make -j9 "${targets[@]}"
+          ccache --show-stats
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-dbg-shard-${{ matrix.shard }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  build-dbg-webcodecs-full:
+    name: Build full dbg WebCodecs variant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: 6.0.5
+          actions-cache-folder: 'cache-emsdk-dbg'
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y meson ccache
+
+      - uses: actions/cache@v4
+        name: Cache dbg source archives
+        with:
+          path: build/*.tar*
+          key: sources-dbg-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ hashFiles('mk/*') }}
+
+      - uses: actions/cache@v4
+        name: Cache dbg compiler outputs
+        with:
+          path: .ccache
+          key: ccache-dbg-${{ runner.os }}-emcc-6.0.5-webcodecs-full-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-dbg-${{ runner.os }}-emcc-6.0.5-webcodecs-full-
+
+      - name: Configure dbg WebCodecs with all supported components
+        shell: bash
+        run: |
+          set -euo pipefail
+          full_config=$(<configs/configs/all/config.json)
+          (
+            cd configs
+            node mkconfig.js webcodecs "$full_config"
+          )
+          cmp configs/configs/all/config.json configs/configs/webcodecs/config.json
+
+      - name: Build full dbg WebCodecs variant
+        env:
+          EM_COMPILER_WRAPPER: ccache
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1500M
+          CCACHE_COMPRESS: '1'
+        run: |
+          set -euo pipefail
+          ccache --zero-stats
+          make -j9 build-dbg-webcodecs
+          ccache --show-stats
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-dbg-webcodecs-full
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  package-dbg:
+    name: Package all dbg variants
+    needs: [build-dbg, build-dbg-webcodecs-full]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-dbg-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Verify all dbg variants are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for dir in configs/configs/*; do
+            variant=${dir##*/}
+            if [[ ! -f "dist/libav-${variant}.dbg.js" ]]; then
+              echo "Missing dist/libav-${variant}.dbg.js" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-all-dbg-variants-${{ github.sha }}
           path: dist/
           if-no-files-found: error

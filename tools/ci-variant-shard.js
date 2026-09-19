@@ -6,8 +6,13 @@ const path = require("path");
 
 const shard = Number(process.argv[2]);
 const shardCount = Number(process.argv[3]);
+const buildType = process.env.BUILD_TYPE;
 if (!Number.isInteger(shard) || !Number.isInteger(shardCount) || shardCount < 1 || shard < 0 || shard >= shardCount) {
     console.error("usage: ci-variant-shard.js SHARD SHARD_COUNT [EXCLUDED_VARIANT ...]");
+    process.exit(2);
+}
+if (buildType !== undefined && buildType !== "release" && buildType !== "dbg") {
+    console.error("BUILD_TYPE must be release or dbg");
     process.exit(2);
 }
 const excluded = new Set(process.argv.slice(4));
@@ -47,4 +52,5 @@ for (const item of work) {
 
 const selected = bins.find((bin) => bin.index === shard);
 selected.variants.sort();
-for (const name of selected.variants) process.stdout.write(`build-${name}\n`);
+const targetPrefix = buildType === undefined ? "build" : `build-${buildType}`;
+for (const name of selected.variants) process.stdout.write(`${targetPrefix}-${name}\n`);
