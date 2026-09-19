@@ -125,9 +125,11 @@ var ff_init_decoder = Module.ff_init_decoder = function(name, config) {
     // If it is not set, use the copy.
     if (AVCodecContext_codec_id(c) === 0) AVCodecContext_codec_id_s(c, codecid);
 
-    // Keep the time base
-    if (config.time_base)
+    // Decoders need the packet time base for skip-sample and timestamp updates.
+    if (config.time_base) {
         AVCodecContext_time_base_s(c, config.time_base[0], config.time_base[1]);
+        AVCodecContext_pkt_timebase_s(c, config.time_base[0], config.time_base[1]);
+    }
 
     ret = avcodec_open2(c, codec, 0);
     if (ret < 0)
@@ -417,4 +419,3 @@ var ff_decode_multi = Module.ff_decode_multi = function(ctx, pkt, frame, inPacke
     outFrames.libavjsTransfer = transfer;
     return outFrames;
 };
-

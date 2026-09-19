@@ -724,8 +724,10 @@ declare namespace LibAV {
         onblockread?: (filename: string, pos: number, length: number) => void;
 
         /**
-         * Terminate the worker associated with this libav.js instance, rendering
-         * it inoperable and freeing its memory.
+         * Terminate workers associated with this libav.js instance and release
+         * its runtime references, rendering it inoperable. Pending operations
+         * reject. The memory becomes reclaimable once external views into it
+         * have also been released.
          */
         terminate(): void;
     }

@@ -77,6 +77,49 @@
         else
             return "wasm";
     }
+
+    /* A threaded Emscripten module keeps its shared WebAssembly.Memory alive
+     * through its exported functions and HEAP views. Worker termination alone
+     * is therefore not enough when the caller still holds the module object. */
+    function releaseInstanceReferences(instance, terminate, mode) {
+        Object.getOwnPropertyNames(instance).forEach(function(key) {
+            if (key === "terminate" || key === "libavjsMode" || key === "c") return;
+            try {
+                delete instance[key];
+            } catch (_) {}
+            if (Object.prototype.hasOwnProperty.call(instance, key)) {
+                try { instance[key] = null; } catch (_) {}
+            }
+        });
+        instance.terminate = terminate;
+        if (mode) instance.libavjsMode = mode;
+    }
+
+    function terminatePThreadWorkers(instance) {
+        var pool = instance && instance.PThread;
+        var workers = [];
+        if (!pool) return workers;
+        workers = (pool.unusedWorkers || []).concat(pool.runningWorkers || []);
+        Object.keys(pool.pthreads || {}).forEach(function(key) {
+            workers.push(pool.pthreads[key]);
+        });
+        if (pool.unusedWorkers) pool.unusedWorkers.length = 0;
+        if (pool.runningWorkers) pool.runningWorkers.length = 0;
+        Object.keys(pool.pthreads || {}).forEach(function(key) {
+            delete pool.pthreads[key];
+        });
+        workers = workers.filter(function(item, index) {
+            return item && workers.indexOf(item) === index;
+        });
+        workers.forEach(function(item) {
+            try { item.onmessage = null; } catch (_) {}
+            try { item.onerror = null; } catch (_) {}
+            if (typeof item.terminate === "function") {
+                try { item.terminate(); } catch (_) {}
+            }
+        });
+        return workers;
+    }
     libav.target = target;
     libav.VER = "@VER";
     libav.CONFIG = "@VARIANT";
@@ -342,13 +385,39 @@
 @E6                 , {type: useES6 ? "module" : "classic"}
                 );
 
+                var workerTerminated = false;
+                var workerTerminationError = null;
+                function terminateWorker(reason) {
+                    if (workerTerminated) return;
+                    workerTerminated = true;
+                    workerTerminationError = reason instanceof Error ? reason :
+                        new Error(reason || "libav.js worker was terminated");
+
+                    var handlers = ret.handlers || {};
+                    Object.keys(handlers).forEach(function(id) {
+                        if (!/^\d+$/.test(id)) return;
+                        var handler = handlers[id];
+                        if (handler && typeof handler[1] === "function")
+                            handler[1](workerTerminationError);
+                    });
+                    ret.handlers = Object.create(null);
+                    ret.onwrite = ret.onread = ret.onblockread = null;
+                    if (ret.worker) {
+                        try { ret.worker.onmessage = null; } catch (_) {}
+                        try { ret.worker.onerror = null; } catch (_) {}
+                        try { ret.worker.terminate(); } catch (_) {}
+                    }
+                    ret.worker = null;
+                }
+
                 // Report our readiness
                 return new Promise(function(res, rej) {
 
                     ret.worker.onerror = ev => {
                         console.error(ev);
-                        ret.worker.terminate();
-                        rej(ev.error || new Error(ev.message));
+                        var error = ev.error || new Error(ev.message);
+                        terminateWorker(error);
+                        rej(error);
                     };
 
                     ret.worker.postMessage({
@@ -362,7 +431,7 @@
                     ret.on = 1;
                     ret.handlers = {
                         error: [null, function(ex) {
-                            ret.worker.terminate();
+                            terminateWorker(ex);
                             rej(ex);
                         }],
                         onready: [function() {
@@ -404,6 +473,8 @@
 
                     // And passthru functions
                     ret.c = function() {
+                        if (workerTerminated)
+                            return Promise.reject(workerTerminationError);
                         var msg = Array.prototype.slice.call(arguments);
                         var transfer = [];
                         for (var i = 0; i < msg.length; i++) {
@@ -433,36 +504,99 @@
 
                     // And termination
                     ret.terminate = function() {
-                        ret.worker.terminate();
+                        terminateWorker();
                     };
                 });
 
             } else if (mode === "threads") {
                 /* Worker through Emscripten's own threads. Start with a real
                  * instance. */
+                var moduleOptions = {
+                    wasmurl: opts.wasmurl || libav.wasmurl,
+                    variant: opts.variant || libav.variant
+                };
                 return Promise.all([]).then(function() {
-                    return factory({
-                        wasmurl: opts.wasmurl || libav.wasmurl,
-                        variant: opts.variant || libav.variant
+                    return Promise.resolve().then(function() {
+                        return factory(moduleOptions);
+                    }).catch(function(ex) {
+                        /* MODULARIZE builds use the supplied options object as
+                         * Module. If startup reached pthread creation before
+                         * rejecting, reclaim that partial pool as well. */
+                        terminatePThreadWorkers(moduleOptions);
+                        releaseInstanceReferences(moduleOptions, function(){}, null);
+                        throw ex;
                     });
                 }).then(function(x) {
                     ret = x;
 
+                    var worker = null;
+                    var handlers = {};
+                    var terminated = false;
+                    var terminationError = null;
+                    var readyTimer = null;
+                    var readyPromiseReject = null;
+                    var originalOnerror = null;
+
+                    function terminateThreads(reason) {
+                        if (terminated) return;
+                        terminated = true;
+                        terminationError = reason instanceof Error ? reason :
+                            new Error(reason || "libav.js threaded instance was terminated");
+                        if (readyTimer !== null) {
+                            clearTimeout(readyTimer);
+                            readyTimer = null;
+                        }
+
+                        Object.keys(handlers).forEach(function(id) {
+                            var handler = handlers[id];
+                            if (handler && typeof handler[1] === "function")
+                                handler[1](terminationError);
+                        });
+                        handlers = {};
+                        readyPromiseReject = null;
+                        readyPromiseRes = null;
+                        originalOnerror = null;
+
+                        terminatePThreadWorkers(ret);
+                        worker = null;
+                        ret.onwrite = ret.onread = ret.onblockread = null;
+                        releaseInstanceReferences(ret, ret.terminate, "threads");
+                    }
+
+                    ret.terminate = function() {
+                        terminateThreads();
+                    };
+
                     // Get the worker
-                    var pthreadT = ret.libavjs_create_main_thread();
-                    var worker = ret.PThread.pthreads[pthreadT];
-                    var ready = 0;
+                    var pthreadT;
+                    try {
+                        pthreadT = ret.libavjs_create_main_thread();
+                        if (!pthreadT)
+                            throw new Error("Could not create the libav.js RPC pthread");
+                        worker = ret.PThread && ret.PThread.pthreads &&
+                            ret.PThread.pthreads[pthreadT];
+                        if (!worker)
+                            throw new Error("The libav.js RPC pthread was not registered");
+                    } catch (ex) {
+                        terminateThreads(ex);
+                        throw ex;
+                    }
 
                     // Our handlers
                     var on = 1;
-                    var handlers = {};
                     var readyPromiseRes = null;
-                    var readyPromise = new Promise(function(res) {
+                    var readyPromise = new Promise(function(res, rej) {
                         readyPromiseRes = res;
+                        readyPromiseReject = rej;
+                        readyTimer = setTimeout(function() {
+                            rej(new Error("Timed out waiting for the libav.js RPC pthread"));
+                        }, 10000);
                     });
 
                     // And passthru functions
                     ret.c = function() {
+                        if (terminated)
+                            return Promise.reject(terminationError);
                         var msg = Array.prototype.slice.call(arguments);
                         return new Promise(function(res, rej) {
                             var id = on++;
@@ -476,6 +610,16 @@
                     };
 
                     var origOnmessage = worker.onmessage;
+                    originalOnerror = worker.onerror;
+                    worker.onerror = function(ev) {
+                        if (typeof originalOnerror === "function") {
+                            try { originalOnerror.apply(this, arguments); } catch (_) {}
+                        }
+                        var error = ev && ev.error ||
+                            new Error(ev && ev.message || "The libav.js RPC pthread failed");
+                        if (readyPromiseReject) readyPromiseReject(error);
+                        else terminateThreads(error);
+                    };
                     worker.onmessage = function(e) {
                         if (e.data && e.data.c === "libavjs_ret") {
                             // Return from a command
@@ -511,32 +655,21 @@
                                 });
                             }
                         } else if (e.data && e.data.c === "libavjs_ready") {
+                            if (readyTimer !== null) {
+                                clearTimeout(readyTimer);
+                                readyTimer = null;
+                            }
+                            readyPromiseReject = null;
                             readyPromiseRes();
                         } else {
                             return origOnmessage.apply(this, arguments);
                         }
                     };
 
-                    // Termination is more complicated
-                    var terminated = false;
-                    ret.terminate = function() {
-                        if (terminated) return;
-                        terminated = true;
-                        var pool = ret.PThread;
-                        if (!pool) return;
-                        var workers = (pool.unusedWorkers || [])
-                            .concat(pool.runningWorkers || []);
-                        Object.keys(pool.pthreads || {}).forEach(function(key) {
-                            workers.push(pool.pthreads[key]);
-                        });
-                        workers.filter(function(worker, index) {
-                            return worker && workers.indexOf(worker) === index;
-                        }).forEach(function(worker) {
-                            if (typeof worker.terminate === "function") worker.terminate();
-                        });
-                    };
-
-                    return readyPromise;
+                    return readyPromise.catch(function(ex) {
+                        terminateThreads(ex);
+                        throw ex;
+                    });
                 });
 
             } else { // Direct mode
@@ -549,9 +682,13 @@
                 }).then(function(x) {
                     ret = x;
                     ret.worker = false;
+                    var directTerminated = false;
+                    var directTerminationError = null;
 
                     // Simple wrappers
                     ret.c = function(func) {
+                        if (directTerminated)
+                            return Promise.reject(directTerminationError);
                         var args = Array.prototype.slice.call(arguments, 1);
                         return new Promise(function(res, rej) {
                             try {
@@ -562,8 +699,17 @@
                         });
                     };
 
-                    // No termination
-                    ret.terminate = function() {};
+                    // Direct modules have no worker realm to discard. Remove
+                    // their exported closures and HEAP views so a retained
+                    // proxy does not also retain the WebAssembly.Memory.
+                    ret.terminate = function() {
+                        if (directTerminated) return;
+                        directTerminated = true;
+                        directTerminationError =
+                            new Error("libav.js direct instance was terminated");
+                        ret.onwrite = ret.onread = ret.onblockread = null;
+                        releaseInstanceReferences(ret, ret.terminate, "direct");
+                    };
                 });
 
             }

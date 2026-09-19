@@ -72,6 +72,9 @@ async function main() {
                 `Module.cwrap(${s(decl[0])}, ${s(decl[1])}, ${s(decl[2])}`;
             if (decl[3] && decl[3].async)
                 out += ", {async:true}";
+            else
+                // Avoid cwrap resolving WASM exports before pthread initialization.
+                out += ", {}";
             out += ");\n";
 
             if (decl[3] && decl[3].returnsErrno) {
