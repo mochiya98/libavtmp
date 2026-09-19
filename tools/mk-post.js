@@ -108,11 +108,11 @@ async function main() {
                 `Module.${freer}_js = ` +
                 `CAccessors.${freer}_js = ` +
                 "function(p) { " +
-                "var p2 = malloc(4); " +
+                "var p2 = libavjs_malloc(4); " +
                 "if (p2 === 0) throw new Error(\"Could not malloc\"); " +
                 "(new Uint32Array(Module.HEAPU8.buffer, p2, 1))[0] = p; " +
                 `CAccessors.${freer}(p2); ` +
-                "free(p2); " +
+                "libavjs_free(p2); " +
                 "};\n";
         }
 

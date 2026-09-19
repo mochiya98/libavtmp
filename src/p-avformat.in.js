@@ -869,8 +869,20 @@ function ff_init_demuxer_file(filename, opts) {
         return [fmt_ctx, streams];
 
     }).catch(function(ex) {
-        if (fmt_ctx)
-            avformat_close_input_js(fmt_ctx);
+        /* Cleanup must not hide the actual demux/open error. This matters in
+         * threaded builds in particular: if a generated freer itself is
+         * broken, reporting only the cleanup exception makes the root cause
+         * impossible to diagnose. */
+        if (fmt_ctx) {
+            try {
+                avformat_close_input_js(fmt_ctx);
+            } catch (cleanupEx) {
+                try {
+                    if (ex && typeof ex === "object")
+                        ex.libavjsCleanupError = cleanupEx;
+                } catch (_) {}
+            }
+        }
         throw ex;
     });
 }

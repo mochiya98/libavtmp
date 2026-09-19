@@ -47,13 +47,34 @@ var ERRNO_CODES = {
  * if we're a Worker */
 var CAccessors = {};
 
+/* Use the compiled exports directly when possible. In pthread workers, a
+ * cwrap-created local named `malloc` can be unavailable even though the
+ * exported allocator is present on Module. Keep the cwrap accessor only as a
+ * compatibility fallback for older Emscripten output. */
+function libavjs_malloc(size) {
+    var fn = Module["_malloc"];
+    if (typeof fn !== "function")
+        fn = CAccessors.malloc;
+    if (typeof fn !== "function")
+        throw new TypeError("libav.js malloc export is unavailable");
+    return fn(size);
+}
+function libavjs_free(ptr) {
+    var fn = Module["_free"];
+    if (typeof fn !== "function")
+        fn = CAccessors.free;
+    if (typeof fn !== "function")
+        throw new TypeError("libav.js free export is unavailable");
+    fn(ptr);
+}
+
 /**
  * Allocate and copy in a 32-bit int list.
  * @param list  List of numbers to copy in
  */
 /// @types ff_malloc_int32_list@sync(list: number[]): @promise@number@
 var ff_malloc_int32_list = Module.ff_malloc_int32_list = function(list) {
-    var ptr = malloc(list.length * 4);
+    var ptr = libavjs_malloc(list.length * 4);
     if (ptr === 0)
         throw new Error("Failed to malloc");
     var arr = new Uint32Array(Module.HEAPU8.buffer, ptr, list.length);
@@ -68,7 +89,7 @@ var ff_malloc_int32_list = Module.ff_malloc_int32_list = function(list) {
  */
 /// @types ff_malloc_int64_list@sync(list: number[]): @promise@number@
 var ff_malloc_int64_list = Module.ff_malloc_int64_list = function(list) {
-    var ptr = malloc(list.length * 8);
+    var ptr = libavjs_malloc(list.length * 8);
     if (ptr === 0)
         throw new Error("Failed to malloc");
     var arr = new Int32Array(Module.HEAPU8.buffer, ptr, list.length*2);
@@ -86,7 +107,7 @@ var ff_malloc_int64_list = Module.ff_malloc_int64_list = function(list) {
  */
 /// @types ff_malloc_string_array@sync(arr: string[]): @promise@number@
 var ff_malloc_string_array = Module.ff_malloc_string_array = function(arr) {
-    var ptr = malloc((arr.length + 1) * 4);
+    var ptr = libavjs_malloc((arr.length + 1) * 4);
     if (ptr === 0)
         throw new Error("Failed to malloc");
     var inArr = new Uint32Array(Module.HEAPU8.buffer, ptr, arr.length + 1);
@@ -108,9 +129,9 @@ var ff_free_string_array = Module.ff_free_string_array = function(ptr) {
         var elPtr = Module.HEAPU32[iPtr];
         if (!elPtr)
             break;
-        free(elPtr);
+        libavjs_free(elPtr);
     }
-    free(ptr);
+    libavjs_free(ptr);
 };
 
 @FUNCS
